@@ -68,6 +68,11 @@ class MLP_Direct(nn.Module):
         self.fc1 = nn.Linear(img_size * img_size * input_dim, 800, bias=False)
         self.fc2 = nn.Linear(800, 10, bias=False)
 
+        ###############################  New Edits ############################################
+        self.expand = nn.Linear(400, 800, bias=False)   # expansion layer
+        self.compress = nn.Linear(800, 400, bias=False)   # compression layer
+        #######################################################################################
+
         # Initialize the firing thresholds of all the layers
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -81,21 +86,32 @@ class MLP_Direct(nn.Module):
         
         batch_size = inp.size(0)
 
-        mem_fc1 = torch.zeros(batch_size, 800).cuda()
+        #mem_fc1 = torch.zeros(batch_size, 800).cuda()
+        mem_fc1 = torch.zeros(batch_size, 400).cuda()
         mem_fc2 = torch.zeros(batch_size, 10).cuda()
         inp = inp.view(batch_size, -1)
         static_input = self.fc1(inp)
 
         for t in range(self.num_steps):
+            # expand compressed state to 800
+            mem_fc1_expanded = self.expand(mem_fc1)   # [batch_size, 800]  New edit --> 27-04-2026
+            
             # Charging and Firing
-            mem_fc1 = self.leak_mem * mem_fc1 + (1-self.leak_mem)*static_input
-            mem_thr = (mem_fc1 / self.fc1.threshold) - 1.0
+            #mem_fc1 = self.leak_mem * mem_fc1 + (1-self.leak_mem)*static_input
+            mem_fc1_expanded = self.leak_mem * mem_fc1_expanded + (1-self.leak_mem)*static_input
+            #mem_thr = (mem_fc1 / self.fc1.threshold) - 1.0
+            mem_thr = (mem_fc1_expanded / self.fc1.threshold) - 1.0            
             out = self.spike_fn(mem_thr)
             
             # Soft Reset
-            rst = torch.zeros_like(mem_fc1).cuda()
+            #rst = torch.zeros_like(mem_fc1).cuda()
+            rst = torch.zeros_like(mem_fc1_expanded).cuda()
+            #rst[mem_thr > 0] = self.fc1.threshold
             rst[mem_thr > 0] = self.fc1.threshold
-            mem_fc1 = mem_fc1 - rst
+            #mem_fc1 = mem_fc1 - rst
+            mem_fc1_expanded = mem_fc1_expanded - rst
+
+            mem_fc1 = self.compress(mem_fc1_expanded)   # [batch_size, 400]  New edit --> 27-04-2026
             out_prev = out.clone()
 
             # accumulate voltage in the last layer
