@@ -210,6 +210,13 @@ class VGG5_Direct(nn.Module):
         self.conv3 = nn.Conv2d(128, 128, kernel_size=3, padding=1, bias=False)
         self.pool2 = nn.AvgPool2d(kernel_size=2)
 
+        ########################## New Edits ######################################################
+        self.expand_conv_1 = nn.Conv2d(32, 64, kernel_size=1, bias=False)
+        self.expand_conv_2 = nn.Conv2d(64, 128, kernel_size=1, bias=False)
+        self.compress_conv_1 = nn.Conv2d(64, 32, kernel_size=1, bias=False)
+        self.compress_conv_2 = nn.Conv2d(128, 64, kernel_size=1, bias=False)
+        ###########################################################################################
+
         self.fc1 = nn.Linear(128 * dim * dim, 1024, bias=False)
         self.fc2 = nn.Linear(1024, num_cls, bias=False)
 
@@ -232,9 +239,12 @@ class VGG5_Direct(nn.Module):
 
         batch_size = inp.size(0)
 
-        mem_conv1 = torch.zeros(batch_size, 64, self.img_size, self.img_size).cuda()
-        mem_conv2 = torch.zeros(batch_size, 128, (self.img_size) // 2, (self.img_size) // 2).cuda()
-        mem_conv3 = torch.zeros(batch_size, 128, (self.img_size) // 2, (self.img_size) // 2).cuda()
+        #mem_conv1 = torch.zeros(batch_size, 64, self.img_size, self.img_size).cuda()
+        mem_conv1 = torch.zeros(batch_size, 32, self.img_size, self.img_size).cuda()
+        #mem_conv2 = torch.zeros(batch_size, 128, (self.img_size) // 2, (self.img_size) // 2).cuda()
+        mem_conv2 = torch.zeros(batch_size, 64, (self.img_size) // 2, (self.img_size) // 2).cuda()
+        #mem_conv3 = torch.zeros(batch_size, 128, (self.img_size) // 2, (self.img_size) // 2).cuda()
+        mem_conv3 = torch.zeros(batch_size, 64, (self.img_size) // 2, (self.img_size) // 2).cuda()
 
         mem_conv_list = [mem_conv1, mem_conv2, mem_conv3]
 
@@ -248,6 +258,9 @@ class VGG5_Direct(nn.Module):
         static_input = self.conv1(inp)
 
         for t in range(self.num_steps):
+            # expand compressed state
+            mem_conv_list[0] = self.expand_conv_1(mem_conv_list[0])   #   New edit --> 28-04-2026
+            
             # Charging and firing (lif for conv1)
             mem_conv_list[0] = self.leak_mem * mem_conv_list[0] + (1 - self.leak_mem) * static_input
             mem_thr = (mem_conv_list[0] / self.conv_list[0].threshold) - 1.0
@@ -257,11 +270,16 @@ class VGG5_Direct(nn.Module):
             rst = torch.zeros_like(mem_conv_list[0]).cuda()
             rst[mem_thr > 0] = self.conv_list[0].threshold
             mem_conv_list[0] = mem_conv_list[0] - rst
+
+            mem_conv_list[0] = self.compress_conv_1(mem_conv_list[0])   #  New edit --> 28-04-2026
             out_prev = out.clone()
 
             # Pooling
             out = self.pool_list[0](out_prev)
             out_prev = out.clone()
+
+            # expand compressed state
+            mem_conv_list[1] = self.expand_conv_2(mem_conv_list[1])   #   New edit --> 28-04-2026
 
             mem_conv_list[1] = self.leak_mem * mem_conv_list[1] + (1 - self.leak_mem) * self.conv2(out_prev)
             mem_thr = (mem_conv_list[1] / self.conv_list[1].threshold) - 1.0
@@ -269,9 +287,13 @@ class VGG5_Direct(nn.Module):
             rst = torch.zeros_like(mem_conv_list[1]).cuda()
             rst[mem_thr > 0] = self.conv_list[1].threshold
             mem_conv_list[1] = mem_conv_list[1] - rst
+
+            mem_conv_list[1] = self.compress_conv_2(mem_conv_list[1])   #  New edit --> 28-04-2026
             out_prev = out.clone()
 
             # print ("aa", out_prev.sum())
+            # expand compressed state
+            mem_conv_list[2] = self.expand_conv_2(mem_conv_list[2])   #   New edit --> 28-04-2026
 
             mem_conv_list[2] = self.leak_mem * mem_conv_list[2] + (1 - self.leak_mem) * self.conv3(out_prev)
             mem_thr = (mem_conv_list[2] / self.conv_list[2].threshold) - 1.0
@@ -279,6 +301,8 @@ class VGG5_Direct(nn.Module):
             rst = torch.zeros_like(mem_conv_list[2]).cuda()
             rst[mem_thr > 0] = self.conv_list[2].threshold
             mem_conv_list[2] = mem_conv_list[2] - rst
+
+            mem_conv_list[2] = self.compress_conv_2(mem_conv_list[2])   #  New edit --> 28-04-2026
             out_prev = out.clone()
 
             # print ("bb",out_prev.sum())
