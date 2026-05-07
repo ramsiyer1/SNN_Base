@@ -149,7 +149,7 @@ if args.dataset == 'mnist':
         batch_size=batch_size,
         shuffle=True,
         drop_last=True, 
-        num_workers=8, 
+        num_workers=2, 
         pin_memory=True)
     
     test_data_loader = torch.utils.data.DataLoader(
@@ -157,7 +157,7 @@ if args.dataset == 'mnist':
         batch_size=batch_size,
         shuffle=False,
         drop_last=False, 
-        num_workers=8, 
+        num_workers=2, 
         pin_memory=True)
 
 elif args.dataset == 'cifar10':
@@ -190,7 +190,7 @@ elif args.dataset == 'cifar10':
         batch_size=batch_size,
         shuffle=True,
         drop_last=True, 
-        num_workers=4,
+        num_workers=2,
         pin_memory=True)
     
     test_data_loader = torch.utils.data.DataLoader(
@@ -198,7 +198,7 @@ elif args.dataset == 'cifar10':
         batch_size=batch_size,
         shuffle=False,
         drop_last=False, 
-        num_workers=4,
+        num_workers=2,
         pin_memory=True)
 
 
@@ -233,7 +233,7 @@ elif args.dataset == 'cifar100':
         batch_size=batch_size,
         shuffle=True,
         drop_last=True, 
-        num_workers=4,
+        num_workers=2,
         pin_memory=True)
 
     test_data_loader = torch.utils.data.DataLoader(
@@ -241,7 +241,7 @@ elif args.dataset == 'cifar100':
         batch_size=batch_size,
         shuffle=False,
         drop_last=False, 
-        num_workers=4,
+        num_workers=2,
         pin_memory=True)
 
 if args.encode == 'd':
@@ -335,8 +335,13 @@ for epoch in range(args.epoch):
     if (epoch + 1) % args.train_display_freq == 0:
         print(
             "Epoch: {}/{};".format(epoch + 1, args.epoch),
-            "########## Training loss: {}".format(train_loss.avg),
+            "########## Training loss: {}".format(train_loss.avg), 
         )
+    print(f"Length of latency log: {len(net.latency_log)}") # --> New Edits - 07-5-2026
+    global_avg = sum(net.latency_log) / len(net.latency_log) # --> New Edits - 07-05-2026
+    print(f"Global average latency per image per timestep: {global_avg:.6f} ms") # --> New Edits - 07-05-2026
+
+    net.latency_log.clear() # --> New Edits - 07-05-2026
 
     adjust_learning_rate(optimizer, epoch, args.epoch)
 
