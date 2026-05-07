@@ -14,6 +14,7 @@ import numpy as np
 import numpy.linalg as LA
 from torch.autograd import Variable
 import pdb
+import time
 
 # --------------------------------------------------
 # Spiking neuron with fast-sigmoid surrogate gradient
@@ -55,6 +56,7 @@ class MLP_Direct(nn.Module):
         self.leak_mem = leak_mem
         self.batch_num = self.num_steps
         self.arch = "SNN"
+        self.latency_log = []  # store per-batch latencies --> New Edits - 07-05-2026
 
         print(">>>>>>>>>>>>>>>>>>> MLP_Direct Coding >>>>>>>>>>>>>>>>>>>>>>")
         
@@ -92,7 +94,12 @@ class MLP_Direct(nn.Module):
         inp = inp.view(batch_size, -1)
         static_input = self.fc1(inp)
 
+        total_time = 0.0 # --> New Edits - 07-05-2026
         for t in range(self.num_steps):
+
+            torch.cuda.synchronize() # --> New Edits - 07-05-2026
+            start = time.time() # --> New Edits - 07-05-2026
+
             # expand compressed state to 800
             mem_fc1_expanded = self.expand(mem_fc1)   # [batch_size, 800]  New edit --> 27-04-2026
             
@@ -114,9 +121,15 @@ class MLP_Direct(nn.Module):
             mem_fc1 = self.compress(mem_fc1_expanded)   # [batch_size, 400]  New edit --> 27-04-2026
             out_prev = out.clone()
 
+            torch.cuda.synchronize() # --> New Edits - 07-05-2026
+            end = time.time() # --> New Edits - 07-05-2026
+            total_time += (end - start) # --> New Edits - 07-05-2026
+
             # accumulate voltage in the last layer
             mem_fc2 = mem_fc2 + self.fc2(out_prev)
 
+        avg_time = (total_time / (self.num_steps * batch_size)) * 1000  # --> New Edit - 07-05-2026
+        self.latency_log.append(avg_time) # --> New Edits - 07-05-2026
         out_voltage = mem_fc2 / self.num_steps
         
         return out_voltage
